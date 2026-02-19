@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Chamados</title>
+    
+    <!-- Tailwind CSS para Estilização -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Configuração do Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Estilos customizados para animações e scrollbar */
+        .view-section { display: none; opacity: 0; transition: opacity 0.3s ease; }
+        .view-section.active { display: flex; opacity: 1; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        
+        #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 50; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast { transform: translateX(100%); opacity: 0; transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+        .toast.show { transform: translateX(0); opacity: 1; }
+
+        /* Estilos da Tabela */
+        .table-row-hover:hover { background-color: #f8fafc; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Container para Notificações -->
+    <div id="toast-container"></div>
+
+    <!-- ================= VIEW: LOGIN ================= -->
+    <div id="view-login" class="view-section active min-h-screen items-center justify-center p-4">
+        <div class="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+            <div class="text-center mb-8">
+                <div class="bg-primary-600 w-12 h-12 rounded-lg flex items-center justify-center mx-auto mb-4 shadow-md">
+                    <i data-lucide="message-square" class="text-white"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-900">Portal de Suporte</h1>
+                <p class="text-gray-500 mt-2 text-sm">Selecione um perfil para acessar o sistema</p>
+            </div>
+            <div id="login-users-container" class="space-y-4">
+                <!-- Preenchido via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= VIEW: DASHBOARD ================= -->
+    <div id="view-dashboard" class="view-section flex-col min-h-screen">
+        <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="layout-dashboard" class="text-primary-600"></i>
+                    <h1 class="font-bold text-lg text-gray-900">Dashboard</h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span id="user-greeting" class="text-sm font-medium text-gray-600 hidden sm:inline-block"></span>
+                    <button id="btn-logout" class="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Sair do sistema">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8 flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <h2 id="dashboard-title" class="text-xl font-semibold text-gray-800">Meus Chamados</h2>
+                
+                <div class="flex items-center gap-3 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+                    <!-- Toggle Visão de Tabela (Apenas Admin) -->
+                    <div id="view-toggle-container" class="hidden items-center gap-3 border-r border-gray-200 pr-4 mr-1">
+                        <span class="text-sm font-semibold text-gray-700">Visão de tabela</span>
+                        <button id="btn-toggle-view" onclick="toggleView()" class="w-11 h-6 rounded-full bg-primary-600 relative transition-colors focus:outline-none flex items-center px-1">
+                            <div id="toggle-knob" class="w-4 h-4 bg-white rounded-full transition-transform transform translate-x-5 shadow-sm"></div>
+                        </button>
+                    </div>
+
+                    <!-- Filtros -->
+                    <div class="relative flex-1 sm:w-64">
+                        <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                        <input type="text" id="search-input" placeholder="Buscar chamados..." class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none">
+                    </div>
+                    <select id="status-filter" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white font-medium text-gray-700">
+                        <option value="todos">Todos os Status</option>
+                        <option value="novo">Pendentes</option>
+                        <option value="em_atendimento">Em Atendimento</option>
+                        <option value="finalizado">Finalizados</option>
+                    </select>
+
+                    <!-- Botão Novo Chamado -->
+                    <button id="btn-new-ticket-nav" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap hidden">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Novo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Container da Lista/Tabela -->
+            <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex-1 flex flex-col">
+                <div id="ticket-list" class="flex-1">
+                    <!-- Preenchido via JS (Tabela ou Cards) -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ================= VIEW: NOVO CHAMADO ================= -->
+    <div id="view-new-ticket" class="view-section flex-col min-h-screen">
+        <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div class="max-w-3xl mx-auto px-4 h-16 flex items-center">
+                <button class="btn-back mr-4 p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors" title="Voltar">
+                    <i data-lucide="chevron-left" class="w-6 h-6"></i>
+                </button>
+                <h1 class="font-bold text-lg text-gray-900">Abrir Novo Chamado</h1>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
+            <form id="form-new-ticket" class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                <div class="space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                            <select id="new-category" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" required>
+                                <option value="Suporte Técnico">Suporte Técnico</option>
+                                <option value="Financeiro">Financeiro</option>
+                                <option value="Dúvidas Gerais">Dúvidas Gerais</option>
+                                <option value="Sugestão">Sugestão de Melhoria</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                            <select id="new-priority" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" required>
+                                <option value="baixa">Baixa</option>
+                                <option value="media" selected>Média</option>
+                                <option value="alta">Alta</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Assunto do Chamado</label>
+                        <input type="text" id="new-title" placeholder="Ex: Problema de acesso ao sistema" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Descrição Detalhada</label>
+                        <textarea id="new-description" placeholder="Descreva o problema ou solicitação com o máximo de detalhes possível..." rows="6" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none" required></textarea>
+                    </div>
+                    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                        <button type="button" class="btn-back px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
+                        <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">Abrir Chamado</button>
+                    </div>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <!-- ================= VIEW: DETALHE DO CHAMADO ================= -->
+    <div id="view-ticket-detail" class="view-section flex-col h-screen overflow-hidden">
+        <header class="bg-white border-b border-gray-200 shrink-0">
+            <div class="max-w-4xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-start gap-3">
+                    <button class="btn-back mt-0.5 p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors shrink-0" title="Voltar">
+                        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                    </button>
+                    <div>
+                        <h1 id="detail-title" class="font-bold text-lg text-gray-900 leading-tight mb-2"></h1>
+                        <div id="detail-badges" class="flex flex-wrap items-center gap-2">
+                            <!-- Preenchido via JS -->
+                        </div>
+                    </div>
+                </div>
+                <div id="admin-actions" class="flex items-center gap-2 sm:ml-auto hidden">
+                    <button id="btn-start-ticket" class="hidden px-3 py-1.5 text-xs font-medium bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-md transition-colors shadow-sm">
+                        <i data-lucide="play-circle" class="w-3.5 h-3.5 inline mr-1"></i> Iniciar Atendimento
+                    </button>
+                    <button id="btn-finish-ticket" class="px-3 py-1.5 text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-md transition-colors shadow-sm">
+                        <i data-lucide="check-circle" class="w-3.5 h-3.5 inline mr-1"></i> Finalizar Chamado
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col overflow-hidden">
+            <!-- Descrição Original -->
+            <div class="bg-white border border-gray-200 rounded-xl p-4 mb-4 shrink-0 shadow-sm">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição Original</h3>
+                    <span id="detail-date" class="text-xs text-gray-400 font-medium"></span>
+                </div>
+                <p id="detail-description" class="text-gray-800 text-sm whitespace-pre-wrap"></p>
+            </div>
+
+            <!-- Área de Mensagens -->
+            <div id="messages-container" class="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 custom-scrollbar flex flex-col">
+                <!-- Preenchido via JS -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="shrink-0 bg-white border border-gray-200 rounded-xl p-2 shadow-sm">
+                <div id="chat-closed-message" class="hidden p-3 text-center text-sm text-gray-500 bg-gray-50 rounded-lg">
+                    <i data-lucide="lock" class="w-4 h-4 inline mr-1 -mt-0.5"></i> Este chamado foi finalizado. Não é possível enviar novas mensagens.
+                </div>
+                <form id="form-message" class="flex gap-2">
+                    <input type="text" id="input-message" placeholder="Digite sua mensagem..." class="flex-1 px-4 py-2 bg-gray-50 border-none focus:ring-0 outline-none text-sm rounded-lg" autocomplete="off">
+                    <button type="submit" id="btn-send-message" class="bg-primary-600 hover:bg-primary-700 text-white p-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                        <i data-lucide="send" class="w-5 h-5"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- ================= JAVASCRIPT LOGIC ================= -->
+    <script>
+        // Inicializa ícones do Lucide
+        lucide.createIcons();
+
+        // --- MOCK DATA SIMULATION ---
+        const MOCK_USERS = [
+            { id: 'usr-1', name: 'João Silva', role: 'user', department: 'Marketing' },
+            { id: 'usr-2', name: 'Maria Oliveira', role: 'user', department: 'Financeiro' },
+            { id: 'adm-1', name: 'Carlos Admin', role: 'admin', department: 'TI' }
+        ];
+
+        let TICKETS = [
+            { id: 'tk-3b33f4', title: 'Problema no faturamento', description: 'Erro 500 na nota.', category: 'Financeiro', priority: 'alta', status: 'novo', authorId: 'usr-1', createdAt: '2026-02-18T10:00:00Z', messages: [] },
+            { id: 'tk-929538', title: 'Atualização de cardápio', description: 'Gostaria de alterar os pratos.', category: 'Suporte Técnico', priority: 'media', status: 'novo', authorId: 'usr-1', createdAt: '2026-02-18T09:30:00Z', messages: [] },
+            { id: 'tk-472683', title: 'Dúvida sobre relatório', description: 'Como exporto para PDF?', category: 'Dúvidas Gerais', priority: 'baixa', status: 'novo', authorId: 'usr-1', createdAt: '2026-02-18T08:15:00Z', messages: [] },
+            { id: 'tk-845c4e', title: 'Acesso bloqueado', description: 'Resolvido pelo suporte.', category: 'Suporte Técnico', priority: 'alta', status: 'finalizado', authorId: 'usr-1', createdAt: '2026-02-17T14:20:00Z', messages: [] },
+            { id: 'tk-76d9d7', title: 'Solicitação de licença', description: 'Adicionar 2 caixas.', category: 'Financeiro', priority: 'media', status: 'finalizado', authorId: 'usr-1', createdAt: '2026-02-17T11:00:00Z', messages: [] },
+            { id: 'tk-0150d1', title: 'Impressora não conecta', description: 'A Elgin não imprime.', category: 'Suporte Técnico', priority: 'alta', status: 'em_atendimento', authorId: 'usr-2', createdAt: '2026-02-12T16:45:00Z', messages: [] },
+            { id: 'tk-625c1a', title: 'Troca de CNPJ', description: 'Mudamos a razão social.', category: 'Financeiro', priority: 'media', status: 'em_atendimento', authorId: 'usr-2', createdAt: '2026-02-12T09:10:00Z', messages: [] },
+            { id: 'tk-2d5e22', title: 'Treinamento sistema', description: 'Finalizado com a equipe.', category: 'Suporte Técnico', priority: 'baixa', status: 'finalizado', authorId: 'usr-1', createdAt: '2026-02-11T13:00:00Z', messages: [] }
+        ];
+
+        // --- GLOBAL STATE ---
+        let currentUser = null;
+        let activeTicketId = null;
+        let isTableView = true; // Toggle para Admin
+        let currentFilter = { text: '', status: 'todos' };
+
+        // --- UTILITIES ---
+        const generateId = (prefix) => `${prefix}-${Math.random().toString(16).slice(2, 8)}`;
+        
+        // Formato Prático: DD/MM/YY
+        const formatDateShort = (isoString) => {
+            const date = new Date(isoString);
+            return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(date);
+        };
+
+        const showToast = (message, type = 'success') => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+            
+            toast.className = `toast ${bgClass} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 text-sm font-medium min-w-[250px]`;
+            toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : type === 'error' ? 'alert-triangle' : 'info'}" class="w-5 h-5"></i>${message}`;
+            
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        // Estilos fiéis à imagem para Tabela e Detalhes
+        const getBadgeStyles = (type, value) => {
+            const styles = {
+                status: {
+                    novo: 'bg-white text-yellow-600 border-yellow-500', // Pendente
+                    em_atendimento: 'bg-white text-blue-600 border-blue-500', // Em andamento
+                    finalizado: 'bg-white text-emerald-600 border-emerald-500' // Finalizado
+                },
+                priority: {
+                    baixa: 'bg-gray-100 text-gray-700 border-gray-200',
+                    media: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                    alta: 'bg-red-100 text-red-800 border-red-200'
+                }
+            };
+            
+            const labels = {
+                novo: 'Pendente', em_atendimento: 'Em Atendimento', finalizado: 'Finalizado',
+                baixa: 'Prioridade Baixa', media: 'Prioridade Média', alta: 'Prioridade Alta'
+            };
+
+            return {
+                class: styles[type][value] || 'bg-gray-100 text-gray-800',
+                label: labels[value] || value
+            };
+        };
+
+        const createBadgeHTML = (type, value) => {
+            const style = getBadgeStyles(type, value);
+            return `<span class="px-3 py-1 rounded-full text-xs font-bold border ${style.class} inline-flex items-center justify-center">${style.label}</span>`;
+        };
+
+        // --- NAVIGATION & TOGGLE ---
+        const navigateTo = (viewId) => {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            
+            if (viewId === 'view-dashboard') renderDashboard();
+            if (viewId === 'view-ticket-detail') renderTicketDetail();
+        };
+
+        const toggleView = () => {
+            isTableView = !isTableView;
+            const knob = document.getElementById('toggle-knob');
+            const btn = document.getElementById('btn-toggle-view');
+            
+            if(isTableView) {
+                knob.classList.add('translate-x-5');
+                btn.classList.replace('bg-gray-300', 'bg-primary-600');
+            } else {
+                knob.classList.remove('translate-x-5');
+                btn.classList.replace('bg-primary-600', 'bg-gray-300');
+            }
+            renderDashboard();
+        };
+
+        // --- RENDERERS ---
+
+        const renderLogin = () => {
+            const container = document.getElementById('login-users-container');
+            container.innerHTML = MOCK_USERS.map(user => `
+                <button onclick="handleLogin('${user.id}')" class="w-full flex items-center p-4 rounded-xl border border-gray-200 hover:border-primary-500 hover:bg-primary-50 hover:shadow-sm transition-all text-left group">
+                    <div class="p-3 rounded-full mr-4 ${user.role === 'admin' ? 'bg-purple-100 text-purple-600 group-hover:bg-purple-200' : 'bg-primary-100 text-primary-600 group-hover:bg-primary-200'} transition-colors">
+                        <i data-lucide="${user.role === 'admin' ? 'shield-check' : 'user'}" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-gray-900">${user.name}</p>
+                        <p class="text-xs text-gray-500">${user.role === 'admin' ? 'Administrador do Sistema' : 'Colaborador - ' + user.department}</p>
+                    </div>
+                </button>
+            `).join('');
+            lucide.createIcons();
+        };
+
+        const renderDashboard = () => {
+            document.getElementById('user-greeting').textContent = `Olá, ${currentUser.name.split(' ')[0]}`;
+            document.getElementById('dashboard-title').textContent = currentUser.role === 'admin' ? 'Todos os Chamados' : 'Meus Chamados';
+            
+            const btnNew = document.getElementById('btn-new-ticket-nav');
+            const toggleContainer = document.getElementById('view-toggle-container');
+            
+            if (currentUser.role === 'admin') {
+                btnNew.classList.add('hidden');
+                toggleContainer.classList.replace('hidden', 'flex'); // Mostra toggle
+            } else {
+                btnNew.classList.remove('hidden');
+                toggleContainer.classList.replace('flex', 'hidden'); // Esconde toggle
+                isTableView = false; // Usuário comum sempre vê cartões
+            }
+
+            // Filtragem
+            let visibleTickets = currentUser.role === 'admin' ? TICKETS : TICKETS.filter(t => t.authorId === currentUser.id);
+            
+            if (currentFilter.status !== 'todos') {
+                visibleTickets = visibleTickets.filter(t => t.status === currentFilter.status);
+            }
+            if (currentFilter.text) {
+                const search = currentFilter.text.toLowerCase();
+                visibleTickets = visibleTickets.filter(t => 
+                    t.title.toLowerCase().includes(search) || 
+                    t.id.toLowerCase().includes(search) ||
+                    MOCK_USERS.find(u => u.id === t.authorId)?.name.toLowerCase().includes(search)
+                );
+            }
+
+            visibleTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            const container = document.getElementById('ticket-list');
+            
+            if (visibleTickets.length === 0) {
+                container.innerHTML = `
+                    <div class="p-12 text-center flex flex-col items-center justify-center">
+                        <div class="bg-gray-100 p-4 rounded-full mb-4">
+                            <i data-lucide="inbox" class="w-8 h-8 text-gray-400"></i>
+                        </div>
+                        <h3 class="text-gray-900 font-medium text-lg">Nenhum chamado encontrado</h3>
+                        <p class="text-gray-500 text-sm mt-1">Tente ajustar seus filtros ou abra um novo chamado.</p>
+                    </div>`;
+            } else {
+                if (isTableView) {
+                    // ================= VISÃO DE TABELA (INSPIRADA NA IMAGEM) =================
+                    container.innerHTML = `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse whitespace-nowrap">
+                                <thead>
+                                    <tr class="border-b border-gray-200 text-sm bg-white">
+                                        <th class="py-4 px-6 font-bold text-gray-900">ID</th>
+                                        <th class="py-4 px-6 font-bold text-gray-900">Data Solic.</th>
+                                        <th class="py-4 px-6 font-bold text-gray-900">Solicitante</th>
+                                        <th class="py-4 px-6 font-bold text-gray-900">Assunto</th>
+                                        <th class="py-4 px-6 font-bold text-gray-900 text-center">Status</th>
+                                        <th class="py-4 px-6 font-bold text-gray-900 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-sm font-medium text-gray-700 divide-y divide-gray-100">
+                                    ${visibleTickets.map(ticket => {
+                                        const author = MOCK_USERS.find(u => u.id === ticket.authorId);
+                                        return `
+                                        <tr class="table-row-hover transition-colors">
+                                            <td class="py-4 px-6 text-gray-500">#${ticket.id.split('-')[1]}</td>
+                                            <td class="py-4 px-6 text-gray-900">${formatDateShort(ticket.createdAt)}</td>
+                                            <td class="py-4 px-6">${author?.name || 'Desconhecido'}</td>
+                                            <td class="py-4 px-6 truncate max-w-[200px] text-gray-900" title="${ticket.title}">${ticket.title}</td>
+                                            <td class="py-4 px-6 text-center">
+                                                ${createBadgeHTML('status', ticket.status)}
+                                            </td>
+                                            <td class="py-4 px-6 text-right">
+                                                <button onclick="openTicket('${ticket.id}')" class="inline-flex items-center gap-2 px-4 py-1.5 border border-teal-600 text-teal-700 rounded-md hover:bg-teal-50 transition-colors bg-white font-semibold text-xs uppercase tracking-wide">
+                                                    <i data-lucide="info" class="w-4 h-4"></i> Saber mais
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                } else {
+                    // ================= VISÃO DE LISTA/CARDS (USUÁRIO) =================
+                    container.innerHTML = `<div class="divide-y divide-gray-100">` + visibleTickets.map(ticket => `
+                        <div onclick="openTicket('${ticket.id}')" class="p-4 hover:bg-gray-50 cursor-pointer transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                                    <span class="text-xs font-mono text-gray-400">#${ticket.id.split('-')[1]}</span>
+                                    <h3 class="text-base font-semibold text-gray-900 truncate group-hover:text-primary-600 transition-colors">
+                                        ${ticket.title}
+                                    </h3>
+                                </div>
+                                <div class="flex items-center gap-2 text-sm text-gray-500 truncate mb-2">
+                                    <i data-lucide="tag" class="w-3.5 h-3.5"></i> ${ticket.category}
+                                </div>
+                                <div class="flex gap-2">
+                                    ${createBadgeHTML('status', ticket.status)}
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-400 flex flex-col items-end gap-1 whitespace-nowrap">
+                                <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${formatDateShort(ticket.createdAt)}</span>
+                            </div>
+                        </div>
+                    `).join('') + `</div>`;
+                }
+            }
+            lucide.createIcons();
+        };
+
+        const renderTicketDetail = () => {
+            const ticket = TICKETS.find(t => t.id === activeTicketId);
+            if (!ticket) return navigateTo('view-dashboard');
+
+            const isClosed = ticket.status === 'finalizado';
+            const author = MOCK_USERS.find(u => u.id === ticket.authorId);
+
+            document.getElementById('detail-title').textContent = ticket.title;
+            // Data formatada para visualização expandida
+            const dateExpanded = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(ticket.createdAt));
+            document.getElementById('detail-date').textContent = `Aberto em ${dateExpanded}`;
+            document.getElementById('detail-description').textContent = ticket.description;
+            
+            document.getElementById('detail-badges').innerHTML = `
+                <span class="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">#${ticket.id.split('-')[1]}</span>
+                ${createBadgeHTML('status', ticket.status)}
+                ${createBadgeHTML('priority', ticket.priority)}
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] uppercase font-bold border bg-purple-50 text-purple-700 border-purple-200">${ticket.category}</span>
+            `;
+
+            const adminActions = document.getElementById('admin-actions');
+            const btnStart = document.getElementById('btn-start-ticket');
+            
+            if (currentUser.role === 'admin' && !isClosed) {
+                adminActions.classList.remove('hidden');
+                btnStart.classList.toggle('hidden', ticket.status !== 'novo');
+            } else {
+                adminActions.classList.add('hidden');
+            }
+
+            const formMsg = document.getElementById('form-message');
+            const inputMsg = document.getElementById('input-message');
+            const closedMsg = document.getElementById('chat-closed-message');
+
+            if (isClosed) {
+                formMsg.classList.add('hidden');
+                closedMsg.classList.remove('hidden');
+            } else {
+                formMsg.classList.remove('hidden');
+                closedMsg.classList.add('hidden');
+                inputMsg.value = '';
+                inputMsg.focus();
+            }
+
+            const msgContainer = document.getElementById('messages-container');
+            
+            if (ticket.messages.length === 0) {
+                msgContainer.innerHTML = `<div class="m-auto text-gray-400 text-sm flex flex-col items-center gap-2"><i data-lucide="messages-square" class="w-8 h-8 opacity-50"></i> Nenhuma interação registrada.</div>`;
+            } else {
+                msgContainer.innerHTML = ticket.messages.map(msg => {
+                    const isMe = msg.authorId === currentUser.id;
+                    const msgAuthor = MOCK_USERS.find(u => u.id === msg.authorId);
+                    const isAdmin = msgAuthor?.role === 'admin';
+
+                    return `
+                        <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                            <div class="flex items-baseline gap-2 mb-1 px-1">
+                                <span class="text-xs font-semibold text-gray-700">
+                                    ${isMe ? 'Você' : msgAuthor?.name.split(' ')[0]}
+                                </span>
+                                ${isAdmin && !isMe ? `<span class="text-[9px] uppercase tracking-wide font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Suporte</span>` : ''}
+                                <span class="text-[10px] text-gray-400">
+                                    ${new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                            <div class="max-w-[85%] sm:max-w-[75%] px-4 py-2.5 text-sm shadow-sm leading-relaxed ${
+                                isMe 
+                                ? 'bg-primary-600 text-white rounded-2xl rounded-tr-sm' 
+                                : 'bg-white border border-gray-200 text-gray-800 rounded-2xl rounded-tl-sm'
+                            }">
+                                ${msg.text}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            lucide.createIcons();
+            setTimeout(() => { msgContainer.scrollTop = msgContainer.scrollHeight; }, 10);
+        };
+
+        // --- ACTIONS HANDLERS ---
+
+        const handleLogin = (userId) => {
+            currentUser = MOCK_USERS.find(u => u.id === userId);
+            console.log(`[AuthService] Login efetuado: ${currentUser.name}`);
+            showToast(`Bem-vindo, ${currentUser.name.split(' ')[0]}!`, 'success');
+            
+            currentFilter = { text: '', status: 'todos' };
+            document.getElementById('search-input').value = '';
+            document.getElementById('status-filter').value = 'todos';
+            
+            // Força tabela como padrão apenas para admin
+            isTableView = currentUser.role === 'admin';
+            
+            navigateTo('view-dashboard');
+        };
+
+        const handleLogout = () => {
+            currentUser = null;
+            activeTicketId = null;
+            console.log('[AuthService] Logout efetuado');
+            navigateTo('view-login');
+        };
+
+        const openTicket = (ticketId) => {
+            activeTicketId = ticketId;
+            navigateTo('view-ticket-detail');
+        };
+
+        const handleCreateTicket = (e) => {
+            e.preventDefault();
+            const title = document.getElementById('new-title').value;
+            const desc = document.getElementById('new-description').value;
+            const category = document.getElementById('new-category').value;
+            const priority = document.getElementById('new-priority').value;
+
+            const newTicket = {
+                id: generateId('tk'), title, description: desc, category, priority, status: 'novo',
+                authorId: currentUser.id, createdAt: new Date().toISOString(), messages: []
+            };
+
+            TICKETS.unshift(newTicket);
+            console.log('[TicketService] Chamado criado:', newTicket.id);
+            e.target.reset();
+            
+            showToast('Chamado aberto com sucesso!', 'success');
+            navigateTo('view-dashboard');
+        };
+
+        const handleSendMessage = (e) => {
+            e.preventDefault();
+            const input = document.getElementById('input-message');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const ticketIndex = TICKETS.findIndex(t => t.id === activeTicketId);
+            if (ticketIndex > -1 && TICKETS[ticketIndex].status !== 'finalizado') {
+                TICKETS[ticketIndex].messages.push({
+                    id: generateId('msg'), text, authorId: currentUser.id, timestamp: new Date().toISOString()
+                });
+                
+                const updatedTicket = TICKETS.splice(ticketIndex, 1)[0];
+                TICKETS.unshift(updatedTicket);
+                renderTicketDetail();
+            }
+        };
+
+        const handleChangeStatus = (newStatus) => {
+            const ticket = TICKETS.find(t => t.id === activeTicketId);
+            if (ticket) {
+                ticket.status = newStatus;
+                console.log(`[TicketService] Status alterado para ${newStatus}`);
+                showToast(`Status atualizado para ${newStatus === 'novo' ? 'pendente' : newStatus.replace('_', ' ')}`, 'info');
+                renderTicketDetail();
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderLogin();
+
+            document.querySelectorAll('.btn-back').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    activeTicketId = null;
+                    navigateTo('view-dashboard');
+                });
+            });
+
+            document.getElementById('btn-logout').addEventListener('click', handleLogout);
+            document.getElementById('btn-new-ticket-nav').addEventListener('click', () => navigateTo('view-new-ticket'));
+            
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                currentFilter.text = e.target.value;
+                renderDashboard();
+            });
+            document.getElementById('status-filter').addEventListener('change', (e) => {
+                currentFilter.status = e.target.value;
+                renderDashboard();
+            });
+
+            document.getElementById('form-new-ticket').addEventListener('submit', handleCreateTicket);
+            document.getElementById('form-message').addEventListener('submit', handleSendMessage);
+
+            document.getElementById('btn-start-ticket').addEventListener('click', () => handleChangeStatus('em_atendimento'));
+            document.getElementById('btn-finish-ticket').addEventListener('click', () => {
+                if(confirm('Tem certeza que deseja finalizar este chamado? O chat será bloqueado.')) {
+                    handleChangeStatus('finalizado');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
